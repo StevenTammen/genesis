@@ -50,7 +50,7 @@ def remove_silence_from_segments(current_dir_path):
         out_file = segment_name.replace(".mp4", "_silence_removed.mp4")
         # print(segment_name)
         # print(out_file)
-        subprocess.run(shlex.split(f'auto-editor recording/raw/{segment_name} --margin 0.5s --my_ffmpeg -vcodec libx264 --extras "-crf 30" --output recording/raw/{out_file} --no-open'))
+        subprocess.run(shlex.split(f'auto-editor recording/raw/{segment_name} --margin 0.5s --my_ffmpeg -vcodec libx264 --preset slow --output recording/raw/{out_file} --no-open'))
         files_to_move.append(out_file)
     
     for file_to_move in files_to_move:
