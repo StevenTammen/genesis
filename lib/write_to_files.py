@@ -1,7 +1,7 @@
 '''
 These functions mostly relate with the automation that:
 
-- Updates _index.md and segments.xlsx with the results
+- Updates _index.md/index.md and segments.xlsx with the results
   of application execution
 - Builds a text file containing the text that will go
   in the YouTube description
@@ -30,21 +30,32 @@ def get_content_headers(recording_dir_path):
     # exactly mirrored in the recordings folder
     content_dir_path = recording_dir_path.replace("/mnt/c/Dropbox/recordings/", "/mnt/c/R/")
 
-    # TODO: support index.md as well as _index.md, for discussion pages
-    # Get text of just the content section on the page
-    content_page_path = content_dir_path + '/' + '_index.md'
-    full_page_contents = read_in_file(content_page_path)
+    # Get text of just the content section on the page.
+    # Support discussion pages too. We know it is a discussion page if _index.md does not exist,
+    # but index.md does exist
+    try:
+        content_page_path = content_dir_path + '/' + '_index.md'
+        full_page_contents = read_in_file(content_page_path)
+    except FileNotFoundError:
+        content_page_path = content_dir_path + '/' + 'index.md'
+        full_page_contents = read_in_file(content_page_path)
+    
     content_section_on_page = content_section_re_pattern.search(full_page_contents)
     if(content_section_on_page != None):
         # First content section on page will be the one for the page itself,
         # rather than being a content section for a nested discussion page
         content_section_on_page = content_section_on_page.group(1)
     else:
-        raise Exception("Content page does not have a properly formed content section. Please check and make sure page is complete.")
+        # Returning none means that there is no content section on the page.
+        # Checks upstream will handle this case appropriately
+        return None
 
     # Get content headers. Findall() returns a list of strings that match the regular expression.
     # It is a list of tuples that gets returned instead, if you use capture group(s).
     content_headers = content_header_re_pattern.findall(content_section_on_page)
+
+    # If the content section does not start with an h2 header that looks like ## Content,
+    # then the page is malformed
     if(content_headers == None):
         raise Exception("Content section does not have any headers. Please check and make sure page is complete.")
 
@@ -52,7 +63,12 @@ def get_content_headers(recording_dir_path):
     content_headers = list(map(str.strip, content_headers))
     
     # We don't care about the first header, since it will always be '## Content'
-    return (content_headers[1:])
+    # So we pop it off the front of the list and then return the rest of the headers.
+    # Note that if there are no headers other than this first one, that is alright. It
+    # means that this was a lesson without any content subheaders. We will return an empty
+    # header list here, and checks upstream will handle this case appropriately.
+    content_headers.pop(0)
+    return (content_headers)
 
 def write_to_existing_segments_spreadsheet(spreadsheet_path, content_headers):
     '''
@@ -86,6 +102,13 @@ def write_content_headers_to_segments_spreadsheet(recording_dir_path):
     '''
     content_headers = get_content_headers(recording_dir_path)
 
+    # # We wouldn't need a spreadsheet to track video segments if there
+    # # is only one video segment = there are no content subheaders. But
+    # # we don't need this check since we don't even try to make spreadsheets for things
+    # # that don't need them
+    # if(len(content_headers) == 0):
+    #     return
+    
     spreadsheet_path = recording_dir_path + '/' + 'segments.xlsx'
     spreadsheet_file = Path(spreadsheet_path)
     if(spreadsheet_file.exists()):

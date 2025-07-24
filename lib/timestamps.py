@@ -163,12 +163,13 @@ timestamps_re_pattern = re.compile(r'^## Timestamps.*\n\n((?:.|\n)+?)\{\{% conte
 transcript_section_re_pattern = re.compile(r'^{{% transcript %}}((?:.|\n)+?){{% /transcript %}}', re.MULTILINE)
 def write_to_content_file(content_page_path, full_page_content, new_video_shortcode, new_timestamps_section, new_transcript):
     full_page_content = video_shortcode_re_pattern.sub(new_video_shortcode, full_page_content, count = 1)
-    full_page_content = timestamps_re_pattern.sub(new_timestamps_section, full_page_content, count = 1)
+    if(new_timestamps_section != ''):
+        full_page_content = timestamps_re_pattern.sub(new_timestamps_section, full_page_content, count = 1)
     full_page_content = transcript_section_re_pattern.sub(new_transcript, full_page_content, count = 1)
     with safe_open_w(content_page_path) as f:
         f.writelines(full_page_content)
 
-summary_re_pattern = re.compile(r'^## Summary.*\n\n((?:.|\n)+?)(?=\n#)', re.MULTILINE)
+summary_re_pattern = re.compile(r'^## Summary.*\n\n((?:.|\n)+?)(?=(?:\n#|\n{{% content %}}))', re.MULTILINE)
 def get_summary_from_page_content(full_page_contents):
     summary = summary_re_pattern.search(full_page_contents)
     if(summary == None):
@@ -176,7 +177,7 @@ def get_summary_from_page_content(full_page_contents):
     summary = summary.group(1)
     return summary
 
-def write_youtube_description_to_file(current_dir_path, content_dir_path, full_page_content, labeled_timestamps_for_youtube_descr):
+def write_youtube_description_to_file(current_dir_path, content_dir_path, full_page_content, labeled_timestamps_for_youtube_descr = ''):
     playlist_url = re.search(r'^playlist: (https://.+)\n', full_page_content, re.MULTILINE)
     if(playlist_url == None):
         raise Exception("Must have playlist URL in frontmatter in content file to build YouTube description")
@@ -193,8 +194,12 @@ def write_youtube_description_to_file(current_dir_path, content_dir_path, full_p
     desc_as_string = (f"Link to wider playlist:\n{playlist_url}\n\n"
                      f"Link to webpage content:\n{webpage_url}\n\n"
                      f"View slides:\n{slides_url}\n\n"
-                     f"Summary:\n\n{summary}\n"
-                     f"Timestamps:\n\n{labeled_timestamps_for_youtube_descr}\n")
+                     f"Summary:\n\n{summary}\n")
+    
+    # Support simple videos that do not have multiple segments, and therefore timestamps.
+    # Only include timestamps in description if they exist.
+    if(labeled_timestamps_for_youtube_descr != ''):
+        desc_as_string = desc_as_string + f"Timestamps:\n\n{labeled_timestamps_for_youtube_descr}\n"
 
     youtube_description_file_path = current_dir_path + '/' + 'youtube-description.txt'
     with safe_open_w(youtube_description_file_path) as f:
@@ -276,30 +281,29 @@ def calculate_timestamps_and_write_to_excel_and_yt_desc(current_dir_path):
     # Overwrites what is there, if anything is already there
     content_dir_path = current_dir_path.replace("/mnt/c/Dropbox/recordings/", "/mnt/c/R/")
     # TODO: make above replacement handle if it is dropbox lowercase not just Dropbox uppercase. Causes runtime exception if you cd to lowercase path not uppercase path in shell
-    content_page_path = content_dir_path + '/' + '_index.md'
-    full_page_content = read_in_file(content_page_path)
+    
+    # Handle discussion pages as well as content pages
+    try:
+        content_page_path = content_dir_path + '/' + '_index.md'
+        full_page_content = read_in_file(content_page_path)
+    except FileNotFoundError:
+        content_page_path = content_dir_path + '/' + 'index.md'
+        full_page_content = read_in_file(content_page_path)
+
     labeled_timestamps_for_youtube_descr = get_labeled_timestamps_for_youtube_descr(headers, start_times)
     write_youtube_description_to_file(current_dir_path, content_dir_path, full_page_content, labeled_timestamps_for_youtube_descr)
     
-def calculate_timestamps_and_write_to_content_file(current_dir_path):
+def calculate_timestamps_and_write_to_content_file(current_dir_path, simple_video = False):
     
-    processed_dir_path = current_dir_path + '/recording/processed'
-    spreadsheet_path = current_dir_path + '/' + 'segments.xlsx'
-
-    duration_map = get_duration_map_based_off_of_processed_recordings(processed_dir_path)
-    start_times = get_segment_start_times(duration_map)
-
-    # Deal with internal timestamps, and build list of objects to
-    # represent the timestamps for the video. Also get headers
-    df = read_in_full_df(spreadsheet_path)  
-    internal_timestamps = df['Internal timestamp'].tolist()
-    start_times = add_start_times_for_segment_internal_timestamps(internal_timestamps, start_times)
-    headers = df['Header'].tolist()
-
-    # TODO support discussion pages too, not just _index.md
     content_dir_path = current_dir_path.replace("/mnt/c/Dropbox/recordings/", "/mnt/c/R/")
-    content_page_path = content_dir_path + '/' + '_index.md'
-    full_page_content = read_in_file(content_page_path)
+
+    # Handle discussion pages as well as content pages
+    try:
+        content_page_path = content_dir_path + '/' + '_index.md'
+        full_page_content = read_in_file(content_page_path)
+    except FileNotFoundError:
+        content_page_path = content_dir_path + '/' + 'index.md'
+        full_page_content = read_in_file(content_page_path)
 
     video_url = re.search(r'^video: (https://.+)\n', full_page_content, re.MULTILINE)
     if(video_url == None):
@@ -324,13 +328,29 @@ def calculate_timestamps_and_write_to_content_file(current_dir_path):
         r'%}}'
     )
 
-    labeled_timestamps_for_markdown = get_labeled_timestamps_for_markdown(video_id, headers, start_times)
-    new_timestamps_section = '## Timestamps {#timestamps}\n\n' + labeled_timestamps_for_markdown + r'\n\n{{% content %}}'
+    new_timestamps_section = ''
+    # Only do timestamp stuff if the video actually has timestamps
+    if(not simple_video):
+        processed_dir_path = current_dir_path + '/recording/processed'
+        spreadsheet_path = current_dir_path + '/' + 'segments.xlsx'
+
+        duration_map = get_duration_map_based_off_of_processed_recordings(processed_dir_path)
+        start_times = get_segment_start_times(duration_map)
+
+        # Deal with internal timestamps, and build list of objects to
+        # represent the timestamps for the video. Also get headers
+        df = read_in_full_df(spreadsheet_path)  
+        internal_timestamps = df['Internal timestamp'].tolist()
+        start_times = add_start_times_for_segment_internal_timestamps(internal_timestamps, start_times)
+        headers = df['Header'].tolist()
+
+        labeled_timestamps_for_markdown = get_labeled_timestamps_for_markdown(video_id, headers, start_times)
+        new_timestamps_section = '## Timestamps {#timestamps}\n\n' + labeled_timestamps_for_markdown + r'\n\n{{% content %}}'
 
     # For now, combine 3 subsegments together to generate somewhat longer "lines" in the transcript
     new_transcript = r'{{% transcript %}}\n\n## Video/audio transcript {#video-audio-transcript}\n\n' + get_transcript(video_id, 3) + r'\n\n{{% /transcript %}}'
 
-    # Write labeled_timestamps_for_markdown to timestamps section of content file
+    # Write labeled_timestamps_for_markdown to timestamps section of content file, if applicable
     # Also fill out video shortcode
     # Overwrites what is there (if anything is already there) in both cases
     write_to_content_file(content_page_path, full_page_content, new_video_shortcode, new_timestamps_section, new_transcript)

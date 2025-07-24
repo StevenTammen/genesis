@@ -38,30 +38,69 @@ class Recording:
         self.topic_transitions_subdir = Path(self.topic_transitions_subdir_path)
 
 def add_to_things_that_need_scaffolding(recording_dir_path, dirs_to_make, dirs_without_spreadsheets):
+
+    scaffolding_type = ''
+    content_headers = get_content_headers(recording_dir_path)
+    if(content_headers == None):
+        scaffolding_type = 'No content ever = no video no slides'
+    # # TODO
+    # elif(???):
+    #     scaffolding_type = 'No content at the moment = simple video no slides'
+    elif(len(content_headers) == 0):
+        scaffolding_type = 'No content subheaders = simple video yes slides'
+    else:
+        scaffolding_type = 'Content subheaders = normal video yes slides'
+
+    need_to_scaffold_recording_dir = False
+    need_to_scaffold_spreadsheet = False
+    need_to_scaffold_recording_subdir = False
+    need_to_scaffold_raw_subdir = False
+    need_to_scaffold_processed_subdir = False
+    need_to_scaffold_topic_transitions_subdir = False
+
+    if(scaffolding_type == 'No content ever = no video no slides'):
+        # Everything stays False = scaffold nothing
+        pass
+    elif(scaffolding_type == 'No content at the moment = simple video no slides'):
+        need_to_scaffold_recording_dir = True
+        need_to_scaffold_recording_subdir = True
+        need_to_scaffold_raw_subdir = True
+    elif(scaffolding_type == 'No content subheaders = simple video yes slides'):
+        need_to_scaffold_recording_dir = True
+        need_to_scaffold_recording_subdir = True
+        need_to_scaffold_raw_subdir = True
+    else: # scaffolding_type == 'Content subheaders = normal video yes slides'
+        need_to_scaffold_recording_dir = True
+        need_to_scaffold_spreadsheet = True
+        need_to_scaffold_recording_subdir = True
+        need_to_scaffold_raw_subdir = True
+        need_to_scaffold_processed_subdir = True
+        need_to_scaffold_topic_transitions_subdir = True
+
     added_something = False
     r = Recording(recording_dir_path)
     # Order is importing when adding to the list of dirs to make
-    if(not r.recording_dir.exists()):
+    if(need_to_scaffold_recording_dir and (not r.recording_dir.exists())):
         print(f'Will make {r.recording_dir_path}')
         dirs_to_make.append(r.recording_dir_path)
         added_something = True
-    if(not r.spreadsheet.exists()):
+    if(need_to_scaffold_spreadsheet and (not r.spreadsheet.exists())):
         print(f'Will make {r.spreadsheet_path}')
         dirs_without_spreadsheets.append(r.recording_dir_path)
         added_something = True
-    if(not r.recording_subdir.exists()):
+    if(need_to_scaffold_recording_subdir and (not r.recording_subdir.exists())):
         print(f'Will make {r.recording_subdir_path}')
         dirs_to_make.append(r.recording_subdir_path)
         added_something = True
-    if(not r.raw_subdir.exists()):
+    if(need_to_scaffold_raw_subdir and (not r.raw_subdir.exists())):
         print(f'Will make {r.raw_subdir_path}')
         dirs_to_make.append(r.raw_subdir_path)
         added_something = True
-    if(not r.processed_subdir.exists()):
+    if(need_to_scaffold_processed_subdir and (not r.processed_subdir.exists())):
         print(f'Will make {r.processed_subdir_path}')
         dirs_to_make.append(r.processed_subdir_path)
         added_something = True
-    if(not r.topic_transitions_subdir.exists()):
+    if(need_to_scaffold_topic_transitions_subdir and (not r.topic_transitions_subdir.exists())):
         print(f'Will make {r.topic_transitions_subdir_path}')
         dirs_to_make.append(r.topic_transitions_subdir_path)
         added_something = True
