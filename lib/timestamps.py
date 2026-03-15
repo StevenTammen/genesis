@@ -16,7 +16,7 @@ from .transcript import *
 import re
 import pandas as pd
 
-def get_duration_map_based_off_of_processed_recordings(processed_dir_path):
+def get_duration_map_based_off_of_processed_recordings(processed_dir_path, spreadsheet_path):
 
     segment_names = [f for f in os.listdir(processed_dir_path) if f.endswith('.mp4')]
 
@@ -24,19 +24,30 @@ def get_duration_map_based_off_of_processed_recordings(processed_dir_path):
     segment_names.sort(key=lambda segment_name : list(
         map(int, re.findall(r'\d+', segment_name)))[0]) 
 
+    topic_transitions = get_is_new_topic_list(spreadsheet_path)
+    # Shift all the booleans one to the left, so that we can track topic transitions
+    # at the end of the segment before, rather than the beginning of the segment after.
+    # This makes the loop logic below easier. The last value doesn't matter, as it will be ignored.
+    topic_transitions.pop(0)
+    topic_transitions.append(False)
+
+    if(len(segment_names) != len(topic_transitions)):
+        raise Exception("The number of recording segments does not match " +
+                        "the number of rows in segments.xlsx.")
+
     # For each mp4 file in directory, store the file name and full duration
     # (not just like 05:20, but a float value containing the actual seconds value)
     # in an ordered array of tuples. Should be in order of file names ascending
     duration_map = []
-    for segment_name in segment_names:
+    for i in range(len(segment_names)):
         # Gets duration of video file.
         # See https://stackoverflow.com/questions/31024968/using-ffmpeg-to-obtain-video-durations-in-python
-        input_file = processed_dir_path + '/' + segment_name
+        input_file = processed_dir_path + '/' + segment_names[i]
         result = subprocess.run(shlex.split(f'ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 {input_file}'), capture_output=True)
         segment_duration = float(result.stdout.decode('utf-8'))
 
         # Builds an ordered list of tuples of the form (filename, duration).
-        duration_map.append(tuple([segment_name, segment_duration]))
+        duration_map.append(tuple([segment_names[i], segment_duration, topic_transitions[i]]))
 
     return duration_map
 
@@ -56,12 +67,16 @@ def get_segment_start_times(duration_map, topic_transition_duration = 3.0):
     # is only responsible for N - 1 timestamps, not N timestamps. All the timestamps but the first.
     for recording in duration_map[:-1]:
         # Duration map is a list of tuples of the form (filename, duration).
-        # So index [1] is duration
+        # So index [1] is duration, and [2] is next_segment_starts_with_topic_transition
         duration = recording[1]
+        next_segment_starts_with_topic_transition = recording[2]
         last_section_ended_at = cumulative_duration + duration
         string_timestamp = get_string_value_of_time(last_section_ended_at)
         timestamps.append(string_timestamp)
-        cumulative_duration += (duration + topic_transition_duration)
+        if(next_segment_starts_with_topic_transition):
+            cumulative_duration += (duration + topic_transition_duration)
+        else:
+            cumulative_duration += duration
        
     return timestamps
 
@@ -256,7 +271,7 @@ def calculate_timestamps_and_write_to_excel_and_yt_desc(current_dir_path):
     processed_dir_path = current_dir_path + '/recording/processed'
     spreadsheet_path = current_dir_path + '/' + 'segments.xlsx'
 
-    duration_map = get_duration_map_based_off_of_processed_recordings(processed_dir_path)
+    duration_map = get_duration_map_based_off_of_processed_recordings(processed_dir_path, spreadsheet_path)
     start_times = get_segment_start_times(duration_map)
 
     # Deal with internal timestamps, and build list of objects to

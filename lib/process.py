@@ -42,7 +42,12 @@ def remove_silence_from_segments(current_dir_path):
     processed_dir_path = current_dir_path + '/recording/processed'
 
     # Organize raw first. May refactor this later
-    rename_raw_segments_to_be_in_tens(raw_dir_path)
+    
+    # Comment out for now, to manually control generation of raw segments
+    # This is because for now, I am moving video clips into the processed/
+    # subdirectory manually
+
+    # rename_raw_segments_to_be_in_tens(raw_dir_path)
 
     segment_names = [f for f in os.listdir(raw_dir_path) if f.endswith('.mp4')]
     files_to_move = []
@@ -99,6 +104,18 @@ def dynamic_audio_normalization():
 # generate_topic_transition_slides()
 def build_topic_transition_segments(current_dir_path):
     topic_transitions_dir_path = current_dir_path + '/recording/topic-transitions/'
+    
+    # First, build the list of names for the topic transition video segments
+    spreadsheet_path = current_dir_path + '/' + 'segments.xlsx'
+    # Get the booleans representing which video segments are topic transitions,
+    # in a list
+    topic_transitions = get_is_new_topic_list(spreadsheet_path)
+    topic_transition_segment_names = []
+    count = 0
+    for is_new_topic in topic_transitions:
+        if(is_new_topic):
+            topic_transition_segment_names.append(f'{count}-{count + 10}_no-audio.mp4')
+        count += 10
 
     # I decided to just temporarily change the cwd when running these commands. Seemed the easiest path.
     # https://stackoverflow.com/a/70682130
@@ -121,13 +138,16 @@ def build_topic_transition_segments(current_dir_path):
     images.sort(key=lambda image : list(
         map(int, re.findall(r'\d+', image)))[0])
     
+    # Validate that we have the number of topic transitions that we expect, and throw an exception
+    # if not
+    if(len(topic_transition_segment_names) != len(images)):
+        raise Exception("The number of topic transitions suggested by the content headers " +
+                        "on the page do not match the number specified in segments.xlsx.")
+
     # Turn each image into a 3 second video (at 25 fps to match the framerate of other recorded content. Zoom records at 25 fps).
     # https://stackoverflow.com/a/73073276
-    counter = 10
-    for image in images:
-        out_file = str(counter) + '-' + str(counter + 10) + '_no-audio.mp4'
-        subprocess.run(shlex.split(f'ffmpeg -framerate 25 -i {image} -t 3 -c:v libx265 -x265-params lossless=1 -pix_fmt yuv420p -vf "scale=1920:1080,loop=-1:1" -movflags faststart {out_file}'))
-        counter += 10
+    for i in range(len(images)):
+        subprocess.run(shlex.split(f'ffmpeg -framerate 25 -i {images[i]} -t 3 -c:v libx265 -x265-params lossless=1 -pix_fmt yuv420p -vf "scale=1920:1080,loop=-1:1" -movflags faststart {topic_transition_segment_names[i]}'))
 
     # Add dummy audio tracks for each of these segments so they can be multiplexed together with all the recorded segments. See:
     # https://superuser.com/questions/1624249/use-ffmpeg-concat-demuxer-with-multiple-files-with-without-audio-tracks
@@ -304,25 +324,18 @@ def combine_video_files(recording_dir_path):
     main_segments = [f for f in os.listdir(main_segments_dir) if f.endswith('.mp4')]
     
     # https://www.geeksforgeeks.org/python-sort-given-list-of-strings-by-part-the-numeric-part-of-string/
-    main_segments.sort(key=lambda main_segment : list(
-        map(int, re.findall(r'\d+', main_segment)))[0]) 
+    # main_segments.sort(key=lambda main_segment : list(
+    #     map(int, re.findall(r'\d+', main_segment)))[0]) 
 
     # Get the topic transition segments from the folder ./recording/topic-transitions/
     transition_segments_dir = recording_dir_path + '/recording/topic-transitions'
     transition_segments = [f for f in os.listdir(transition_segments_dir) if f.endswith('.mp4')]
 
-    # https://www.geeksforgeeks.org/python-sort-given-list-of-strings-by-part-the-numeric-part-of-string/
-    transition_segments.sort(key=lambda transition_segment : list(
-        map(int, re.findall(r'\d+', transition_segment)))[0]) 
+    combined_segment_list = main_segments + transition_segments
 
-    # Get the segments in the right order by placing transition segments between the main segments.
-    # If there are N main segments, there ought to be N - 1 transition segments
-    if(len(main_segments) - 1 != len(transition_segments)):
-        raise Exception('The number of transition segments is incorrect given the number of processed segments.')
-    combined_segment_list = [main_segments[0]]
-    for i in range(len(transition_segments)):
-        combined_segment_list.append(transition_segments[i])
-        combined_segment_list.append(main_segments[i+1])
+    # https://www.geeksforgeeks.org/python-sort-given-list-of-strings-by-part-the-numeric-part-of-string/
+    combined_segment_list.sort(key=lambda transition_segment : list(
+        map(int, re.findall(r'\d+', transition_segment)))[0]) 
 
     # Add the proper directory paths before each file name, based upon the segment type
     for i in range(len(combined_segment_list)):
@@ -342,8 +355,6 @@ def combine_video_files(recording_dir_path):
     # Run the concatenation command with the concat video filter.
     # This does re-render (rather than copy, as with -c copy)
     subprocess.run(shlex.split(f'ffmpeg {input_files} -filter_complex "{stream_mappings}concat=n={num_inputs}:v=1:a=1[outv][outa]" -map "[outv]" -map "[outa]" video.mp4'))
-
-    #add_chapters_to_video_file(recording_dir_path)
 
 # TODO
 def rip_audio_off_video():

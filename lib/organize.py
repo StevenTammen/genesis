@@ -229,9 +229,12 @@ def generate_topic_transition_slides(recording_dir_path, clvaa_path):
     template = read_in_file(topic_transitions_slides_path)
     spreadsheet_path = recording_dir_path + '/' + 'segments.xlsx'
     headers = get_non_internal_headers_list(spreadsheet_path)
-    # We don't do a transition for the first header since that's the beginning of the video
-    # Hence [1:] as index
-    headers_split_into_slides = '\n\n---\n\n'.join(headers[1:])
+
+    # Filter the list down only to headers that are topic transitions
+    topic_transitions = get_is_new_topic_list(spreadsheet_path)
+    headers = [header for header, is_new_topic in zip(headers, topic_transitions) if is_new_topic]
+
+    headers_split_into_slides = '\n\n---\n\n'.join(headers)
     to_write = re.sub('markdown-content', headers_split_into_slides, template)
     with safe_open_w(topic_transitions_slides_path) as f:
         f.writelines(to_write)

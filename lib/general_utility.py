@@ -26,6 +26,11 @@ def get_headers_list(spreadsheet_path):
   headers_list = df['Header'].tolist()
   return headers_list
 
+def get_is_new_topic_list(spreadsheet_path):
+  df = read_in_full_df(spreadsheet_path)
+  headers_list = df['Is new topic?'].tolist()
+  return headers_list
+
 def get_internal_timestamps_list(spreadsheet_path):
   df = read_in_full_df(spreadsheet_path)
   internal_timestamps_list = df['Internal timestamp'].tolist()

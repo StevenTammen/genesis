@@ -46,7 +46,7 @@ if(not is_single_video_segment_case):
     combine_video_files(current_dir_path)
 
     # Add chapter metadata to the single video file
-    add_chapters_to_video_file(current_dir_path)
+    #add_chapters_to_video_file(current_dir_path)
 
 # -----------------------------------------
 

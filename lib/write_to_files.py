@@ -17,6 +17,27 @@ from .general_utility import *
 import pandas as pd
 import re
 
+vsrc_re_pattern = re.compile(r'vsrc: ')
+def has_vsrc_attribute(recording_dir_path):
+
+    # First convert path to the content version. Here, we are implicitly
+    # assuming that the folder structure for the content project is
+    # exactly mirrored in the recordings folder
+    content_dir_path = recording_dir_path.replace("/mnt/c/Dropbox/recordings/", "/mnt/c/R/")
+
+    # Get text of just the content section on the page.
+    # Support discussion pages too. We know it is a discussion page if _index.md does not exist,
+    # but index.md does exist
+    try:
+        content_page_path = content_dir_path + '/' + '_index.md'
+        full_page_contents = read_in_file(content_page_path)
+    except FileNotFoundError:
+        content_page_path = content_dir_path + '/' + 'index.md'
+        full_page_contents = read_in_file(content_page_path)
+    
+    has_vsrc_attribute = vsrc_re_pattern.search(full_page_contents) != None
+    return has_vsrc_attribute
+
 content_section_re_pattern = re.compile(r'^{{% content %}}((?:.|\n)+?){{% /content %}}', re.MULTILINE)
 content_header_re_pattern = re.compile(r'^[#]+ [^{\n]+', re.MULTILINE)
 def get_content_headers(recording_dir_path):
@@ -100,7 +121,17 @@ def write_content_headers_to_segments_spreadsheet(recording_dir_path):
     '''
     TODO: description
     '''
-    content_headers = get_content_headers(recording_dir_path)
+    original_content_headers = get_content_headers(recording_dir_path)
+    is_video_discussion = has_vsrc_attribute(recording_dir_path)
+    content_headers = []
+    if(is_video_discussion):
+        content_headers.append("### Intro and outline")
+        for h in original_content_headers:
+            content_headers.append(h)
+            content_headers.append("#### Video clip")
+            content_headers.append("#### Discussion")
+    else:
+        content_headers = original_content_headers
 
     # # We wouldn't need a spreadsheet to track video segments if there
     # # is only one video segment = there are no content subheaders. But
